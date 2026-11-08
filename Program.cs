@@ -1,9 +1,11 @@
 ﻿using FluentValidation;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.SqlClient;
-using UserManager.Data;
-using UserManager.Mapping;
-using UserManager.Services;
+using Microsoft.EntityFrameworkCore;
+using UserManager.Application.Services;
+using UserManager.Application.Validation;
+using UserManager.Domain.Entities;
+using UserManager.Infrastructure.Persistence;
 
 namespace UserManager;
 
@@ -13,32 +15,25 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
-        // FluentValidation registration (from Classwork 24.10.2026)
-        builder.Services.AddValidatorsFromAssemblyContaining<Program>();
-
         builder.Services.AddControllers();
         builder.Services.AddOpenApi();
 
         var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
-        var databasePassword = builder.Configuration["DatabasePassword"]
-            ?? throw new InvalidOperationException(
-                "Database password is not configured. Set it as User Secret 'DatabasePassword' or environment variable 'DatabasePassword'.");
-
-        var sqlConnectionString = new SqlConnectionStringBuilder(connectionString)
+        var databasePassword = builder.Configuration["DatabasePassword"];
+        if (!string.IsNullOrWhiteSpace(databasePassword))
         {
-            Password = databasePassword
-        }.ConnectionString;
+            connectionString = new SqlConnectionStringBuilder(connectionString)
+            {
+                Password = databasePassword
+            }.ConnectionString;
+        }
 
-        builder.Services.AddDbContext<AppDbContext>(options =>
-            options.UseSqlServer(sqlConnectionString));
-
-        builder.Services.AddAutoMapper(cfg =>
-        {
-            cfg.AddMaps(typeof(MappingProfile).Assembly);
-        });
-
+        builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlServer(connectionString));
+        builder.Services.AddValidatorsFromAssemblyContaining<CreateProductRequestValidator>();
         builder.Services.AddScoped<IProductService, ProductService>();
+        builder.Services.AddScoped<IUserService, UserService>();
+        builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
